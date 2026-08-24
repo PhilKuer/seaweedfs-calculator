@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Volume Capacity Planner — SeaweedFS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0b1a2b;
+    --bg-deep: #081422;
+    --grid-line: rgba(95, 212, 208, 0.07);
+    --panel: #0f2338;
+    --panel-2: #0d2032;
+    --panel-border: #1c3a54;
+    --cyan: #5fd4d0;
+    --cyan-dim: #3c8f8c;
+    --amber: #f2a65a;
+    --amber-dim: #a97640;
+    --red: #e8615a;
+    --green: #6fce7c;
+    --text: #e7edf2;
+    --text-dim: #8ca0b3;
+    --text-faint: #55697c;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --cond: 'IBM Plex Sans Condensed', system-ui, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 28px 28px,
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 28px 28px,
+      radial-gradient(ellipse at top left, #0e2438 0%, var(--bg) 55%),
+      var(--bg-deep);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 32px 20px 64px;
+  }
+  .wrap{ max-width: 1180px; margin: 0 auto; }
+
+  header{ display:flex; justify-content:space-between; align-items:flex-end; gap: 24px; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--panel-border); flex-wrap: wrap; }
+  .eyebrow{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--cyan); text-transform: uppercase; margin-bottom: 8px; display:flex; align-items:center; gap:8px; }
+  .eyebrow::before{ content:''; width:7px; height:7px; background:var(--amber); display:inline-block; clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+  h1{ font-family: var(--cond); font-weight:600; font-size: 34px; margin:0; letter-spacing: -0.01em; line-height:1.1; }
+  h1 span{ color: var(--text-dim); font-weight:500; }
+  .subtitle{ color: var(--text-dim); font-size: 13.5px; margin-top:8px; max-width: 560px; line-height:1.5; }
+  .status-chip{ font-family: var(--mono); font-size: 11.5px; padding: 7px 12px; border:1px solid var(--panel-border); border-radius: 3px; color: var(--text-dim); white-space:nowrap; background: var(--panel-2); }
+
+  .grid{ display:grid; grid-template-columns: 340px 1fr; gap: 20px; align-items:start; }
+  @media (max-width: 900px){ .grid{ grid-template-columns: 1fr; } }
+
+  .panel{ background: var(--panel); border: 1px solid var(--panel-border); border-radius: 4px; padding: 20px 20px 22px; }
+  .panel + .panel{ margin-top: 20px; }
+  .panel-title{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan); margin: 0 0 16px; display:flex; justify-content:space-between; align-items:center; }
+  .panel-title .idx{ color: var(--text-faint); }
+
+  label{ display:block; font-size: 12.5px; color: var(--text-dim); margin-bottom: 6px; }
+  .field{ margin-bottom: 16px; }
+
+  input[type="number"], input[type="text"], select{
+    background: var(--panel-2); border: 1px solid var(--panel-border);
+    color: var(--text); font-family: var(--mono); font-size: 14px; padding: 9px 10px;
+    border-radius: 3px; outline:none; transition: border-color .15s; width:100%;
+  }
+  input::placeholder{ color: var(--text-faint); font-style: italic; }
+  input:focus, select:focus{ border-color: var(--cyan); }
+  select{ appearance:none; cursor:pointer; background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%), linear-gradient(135deg, var(--text-dim) 50%, transparent 50%); background-position: calc(100% - 16px) center, calc(100% - 11px) center; background-size: 5px 5px, 5px 5px; background-repeat:no-repeat; }
+
+  .unit-row{ display:flex; gap:8px; }
+  .unit-row input{ flex:1; }
+  .unit-row select{ width: 88px; flex-shrink:0; }
+
+  input[type="range"]{ width:100%; accent-color: var(--cyan); background:transparent; cursor:pointer; }
+  .slider-value{ font-family: var(--mono); color: var(--amber); font-size: 15px; font-weight:600; }
+  .slider-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .slider-caps{ display:flex; justify-content:space-between; font-family: var(--mono); font-size:10.5px; color: var(--text-faint); margin-top:4px;}
+
+  .hint{ font-size: 11.5px; color: var(--text-faint); margin-top: 5px; line-height:1.45; }
+  .formula-note{ font-family: var(--mono); font-size: 11px; color: var(--cyan-dim); background: rgba(95,212,208,0.06); border-left: 2px solid var(--cyan-dim); padding: 8px 10px; margin-top: 10px; line-height:1.6; border-radius: 0 3px 3px 0; }
+
+  /* ---------- Buckets ---------- */
+  .bucket-card{ border: 1px solid var(--panel-border); border-radius: 4px; padding: 12px 12px 13px; margin-bottom: 10px; background: var(--panel-2); }
+  .bucket-card-top{ display:grid; grid-template-columns: 14px 1fr 26px; gap:9px; align-items:center; margin-bottom: 10px; }
+  .bucket-swatch{ width:12px; height:12px; border-radius:2px; }
+  .bucket-card-top input[type="text"]{ font-family: var(--sans); font-size: 13.5px; padding: 7px 9px; }
+  .bucket-card-top .rm{ width:26px; height:26px; border:1px solid var(--panel-border); background: var(--panel); color: var(--text-faint); border-radius:3px; cursor:pointer; font-family: var(--mono); font-size:13px; display:flex; align-items:center; justify-content:center; transition: all .15s; }
+  .bucket-card-top .rm:hover{ border-color: var(--red); color: var(--red); }
+
+  .triad{ display:grid; grid-template-columns: 1fr auto 1fr auto 1.4fr; gap: 6px; align-items:end; margin-bottom:8px; }
+  .triad-op{ font-family: var(--mono); color: var(--text-faint); font-size: 15px; text-align:center; padding-bottom: 8px; }
+  .triad label{ font-size: 10px; margin-bottom:4px; white-space:nowrap; }
+  .triad input[type="number"]{ padding: 7px 8px; font-size:12.5px; text-align:center; }
+  .est-row{ display:flex; gap:5px; }
+  .est-row input{ flex:1.3; padding:7px 6px; font-size:12.5px; text-align:center; }
+  .est-row select{ flex:1; width:auto; padding:7px 4px; font-size:11px; }
+  .derived{ color: var(--amber); }
+  .derived::placeholder{ color: var(--amber-dim); }
+
+  .bucket-card-foot{ font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); display:flex; justify-content:space-between; align-items:center; gap:8px; padding-top: 8px; border-top: 1px dashed var(--panel-border); flex-wrap:wrap; }
+  .bucket-card-foot .fit-badge{ padding: 2px 7px; border-radius: 2px; font-size: 10px; letter-spacing:0.02em; }
+  .fit-badge.ok{ background: rgba(111,206,124,0.12); color: var(--green); }
+  .fit-badge.warn{ background: rgba(242,166,90,0.14); color: var(--amber); }
+  .fit-badge.danger{ background: rgba(232,97,90,0.14); color: var(--red); }
+
+  .add-bucket{ width:100%; margin-top: 6px; padding: 9px; border-radius:3px; background: transparent; border: 1px dashed var(--panel-border); color: var(--text-dim); font-family: var(--mono); font-size: 12px; cursor:pointer; transition: all .15s; }
+  .add-bucket:hover{ border-color: var(--cyan); color: var(--cyan); }
+
+  /* ---------- Results ---------- */
+  .stat-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--panel-border); border: 1px solid var(--panel-border); border-radius: 4px; overflow:hidden; margin-bottom: 20px; }
+  .stat{ background: var(--panel); padding: 16px 16px 14px; }
+  .stat-label{ font-family: var(--mono); font-size: 10px; text-transform:uppercase; letter-spacing:0.08em; color: var(--text-faint); margin-bottom:8px; }
+  .stat-value{ font-family: var(--mono); font-size: 26px; font-weight:600; color: var(--text); line-height:1; }
+  .stat-value.warn{ color: var(--amber); }
+  .stat-value.danger{ color: var(--red); }
+  .stat-value.ok{ color: var(--cyan); }
+  .stat-sub{ font-size: 11px; color: var(--text-faint); margin-top:6px; }
+
+  .capacity-bar-wrap{ margin-bottom: 22px; }
+  .capacity-bar-head{ display:flex; justify-content:space-between; font-family: var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:8px; }
+  .capacity-bar{ height: 34px; background: var(--panel-2); border:1px solid var(--panel-border); border-radius:3px; display:flex; overflow:hidden; position:relative; }
+  .capacity-seg{ height:100%; position:relative; }
+  .capacity-seg.overflow{ background: repeating-linear-gradient(45deg, var(--red), var(--red) 4px, #1a0d0c 4px, #1a0d0c 9px); }
+
+  .servermap-wrap{ margin-top: 6px; }
+  .servermap{ display:flex; flex-direction:column; gap: 14px; }
+  .server-label{ font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); margin-bottom:6px; display:flex; justify-content:space-between; }
+  .server-slots{ display:grid; grid-template-columns: repeat(auto-fill, minmax(15px, 1fr)); gap: 3px; }
+  .slot{ aspect-ratio: 1; border-radius: 1px; background: var(--panel-2); border:1px solid var(--panel-border); }
+  .slot.filled{ border-color: transparent; }
+  .slot.overflow{ background: repeating-linear-gradient(45deg, var(--red) 0 2px, #1a0d0c 2px 4px); border-color: var(--red); }
+
+  .legend{ display:flex; flex-wrap:wrap; gap: 10px 16px; margin-top: 16px; }
+  .legend-item{ display:flex; align-items:center; gap:6px; font-size: 12px; color: var(--text-dim); }
+  .legend-swatch{ width:11px; height:11px; border-radius:2px; flex-shrink:0; }
+
+  .callout{ font-family: var(--mono); font-size: 12px; padding: 12px 14px; border-radius: 3px; margin-top: 18px; line-height: 1.6; border: 1px solid; }
+  .callout.ok{ background: rgba(95,212,208,0.06); border-color: var(--cyan-dim); color: var(--cyan); }
+  .callout.warn{ background: rgba(242,166,90,0.07); border-color: var(--amber-dim); color: var(--amber); }
+  .callout.danger{ background: rgba(232,97,90,0.08); border-color: var(--red); color: var(--red); }
+
+  footer{ margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--panel-border); font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="eyebrow">weed shell — capacity model</div>
+      <h1>Volume Capacity Planner <span>/ SeaweedFS</span></h1>
+      <div class="subtitle">Growth, volumeSizeLimitMB und Ziel-Volumen hängen zusammen: <span style="color:var(--amber)">Ziel-Volumen = Growth × volumeSizeLimitMB</span>. Trag zwei der drei Werte pro Bucket ein — der dritte wird automatisch berechnet (amber = abgeleitet).</div>
+    </div>
+    <div class="status-chip" id="statusChip">— berechne —</div>
+  </header>
+
+  <div class="grid">
+
+    <div>
+      <div class="panel">
+        <div class="panel-title">Cluster <span class="idx">01</span></div>
+
+        <div class="field">
+          <label for="numServers">Volume-Server</label>
+          <input type="number" id="numServers" value="3" min="1" max="64" />
+        </div>
+
+        <div class="field">
+          <label for="pvcSize">Storage pro Volume-Server</label>
+          <div class="unit-row">
+            <input type="number" id="pvcSize" value="5" min="0.1" step="0.1" />
+            <select id="pvcUnit">
+              <option value="1024">Gi</option>
+              <option value="1000">GB</option>
+              <option value="1">MB</option>
+              <option value="1048576">Ti</option>
+            </select>
+          </div>
+          <div class="hint">Entspricht deiner PVC-Größe je Volume-Server-Pod.</div>
+        </div>
+
+        <div class="field">
+          <label for="replication">Replication</label>
+          <select id="replication">
+            <option value="000">000 — keine Replikation (×1)</option>
+            <option value="001" selected>001 — anderer Server (×2)</option>
+            <option value="010">010 — anderes Rack (×2)</option>
+            <option value="100">100 — andere DC (×2)</option>
+            <option value="002">002 — 2× anderer Server (×3)</option>
+            <option value="011">011 — anderes Rack + Server (×4)</option>
+            <option value="110">110 — andere DC + Rack (×4)</option>
+            <option value="200">200 — 2× andere DC (×3)</option>
+            <option value="222">222 — max. Redundanz (×27)</option>
+          </select>
+          <div class="formula-note" id="replFormula">Kopien = (0+1) × (0+1) × (1+1) = 2</div>
+          <div class="hint">Kopien vervielfachen nur den physischen Platzverbrauch, nicht die nutzbare Kapazität.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Cluster-Default <span class="idx">02</span></div>
+
+        <div class="slider-head">
+          <label for="volSize" style="margin:0;">volumeSizeLimitMB</label>
+          <span class="slider-value" id="volSizeValue">1000</span>
+        </div>
+        <input type="range" id="volSize" min="100" max="30000" step="50" value="1000" />
+        <div class="slider-caps"><span>100</span><span>30 000 (Hard-Cap)</span></div>
+        <div class="hint">Master-weiter Wert. Gilt für jeden Bucket, sofern nicht dort überschrieben oder aus den anderen zwei Feldern abgeleitet.</div>
+
+        <div class="field" style="margin-top:18px;">
+          <label for="growthCount">volumeGrowthCount (Default)</label>
+          <input type="number" id="growthCount" value="2" min="1" max="64" />
+          <div class="hint">Gilt, wenn ein Bucket weder Growth noch Ziel-Volumen angibt.</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="panel-title">Buckets <span class="idx">03</span></div>
+        <div class="hint" style="margin-top:-8px; margin-bottom:14px;">Growth, volumeSizeLimitMB und Ziel-Volumen bilden ein Dreieck — fülle zwei aus, das dritte wird berechnet (amber, "auto"). Sind alle drei leer, gelten die Cluster-Defaults links.</div>
+
+        <div id="bucketList"></div>
+        <button class="add-bucket" id="addBucket">+ Bucket hinzufügen</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Ergebnis <span class="idx">04</span></div>
+
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="stat-label">Cluster-Kapazität</div>
+            <div class="stat-value" id="statCapacity">—</div>
+            <div class="stat-sub" id="statCapacitySub">MB roh, unrepliziert</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Physisch reserviert</div>
+            <div class="stat-value" id="statReserved">—</div>
+            <div class="stat-sub" id="statReservedSub">durch aktuelle Buckets</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Weitere Buckets möglich</div>
+            <div class="stat-value" id="statMaxMore">—</div>
+            <div class="stat-sub" id="statMaxMoreSub">bei Cluster-Default-Reservierung</div>
+          </div>
+        </div>
+
+        <div class="capacity-bar-wrap">
+          <div class="capacity-bar-head"><span>Physische Kapazitätsbelegung je Bucket</span><span id="capacityPct">0%</span></div>
+          <div class="capacity-bar" id="capacityBar"></div>
+        </div>
+
+        <div class="servermap-wrap">
+          <div class="capacity-bar-head"><span>Volume-Belegung je Server (bei Cluster-Default volumeSizeLimitMB)</span><span id="slotsInfo">— Slots</span></div>
+          <div class="servermap" id="serverMap"></div>
+        </div>
+
+        <div class="legend" id="legend"></div>
+
+        <div id="calloutBox"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    dreieck — ziel-volumen = growth × volumesizelimitmb (logisch, ohne replikation) &nbsp;·&nbsp; physisch reserviert/bucket(mb) = growth × copies × volumesizelimitmb &nbsp;·&nbsp; copies = (x+1)(y+1)(z+1) für replication xyz &nbsp;·&nbsp; max_volumesizelimitmb = 30000
+  </footer>
+</div>
+
+<script>
+(function(){
+  const PALETTE = ['#5fd4d0','#f2a65a','#9d8cf0','#6fce7c','#e8615a','#4ec9e8','#e0c15f','#c98cd0'];
+  const UNIT_FACTORS = { '%': null, 'MB': 1, 'GB': 1000, 'Gi': 1024, 'Ti': 1048576 };
+
+  const els = {
+    numServers: document.getElementById('numServers'),
+    pvcSize: document.getElementById('pvcSize'),
+    pvcUnit: document.getElementById('pvcUnit'),
+    replication: document.getElementById('replication'),
+    replFormula: document.getElementById('replFormula'),
+    volSize: document.getElementById('volSize'),
+    volSizeValue: document.getElementById('volSizeValue'),
+    growthCount: document.getElementById('growthCount'),
+    bucketList: document.getElementById('bucketList'),
+    addBucket: document.getElementById('addBucket'),
+    statCapacity: document.getElementById('statCapacity'),
+    statCapacitySub: document.getElementById('statCapacitySub'),
+    statReserved: document.getElementById('statReserved'),
+    statReservedSub: document.getElementById('statReservedSub'),
+    statMaxMore: document.getElementById('statMaxMore'),
+    statMaxMoreSub: document.getElementById('statMaxMoreSub'),
+    capacityBar: document.getElementById('capacityBar'),
+    capacityPct: document.getElementById('capacityPct'),
+    serverMap: document.getElementById('serverMap'),
+    slotsInfo: document.getElementById('slotsInfo'),
+    legend: document.getElementById('legend'),
+    calloutBox: document.getElementById('calloutBox'),
+    statusChip: document.getElementById('statusChip'),
+  };
+
+  // growth / volSize / estValue: '' = leer -> Teil des Dreiecks, wird ggf. abgeleitet
+  let buckets = [
+    { id: 1, name: 'campaign-img', growth: '', volSize: '', estValue: '', estUnit: 'MB' },
+    { id: 2, name: 's-content-service', growth: '', volSize: '', estValue: '', estUnit: 'MB' },
+    { id: 3, name: 'default-bucket', growth: '', volSize: '', estValue: '', estUnit: 'MB' },
+  ];
+  let nextId = 4;
+
+  function copiesFromReplication(code){
+    const x = parseInt(code[0],10), y = parseInt(code[1],10), z = parseInt(code[2],10);
+    return { copies: (x+1)*(y+1)*(z+1), x, y, z };
+  }
+
+  function fmt(n){
+    if (n === Infinity) return '∞';
+    if (Math.abs(n) >= 1000) return n.toLocaleString('de-DE', {maximumFractionDigits:0});
+    return n.toLocaleString('de-DE', {maximumFractionDigits: 1});
+  }
+
+  function numOrEmpty(v){
+    const s = (v||'').toString().trim();
+    if (s === '') return null;
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+  }
+
+  function renderBucketRows(){
+    els.bucketList.innerHTML = '';
+    buckets.forEach((b, i) => {
+      const color = PALETTE[i % PALETTE.length];
+      const card = document.createElement('div');
+      card.className = 'bucket-card';
+      card.innerHTML = `
+        <div class="bucket-card-top">
+          <div class="bucket-swatch" style="background:${color}"></div>
+          <input type="text" value="${b.name}" data-id="${b.id}" data-field="name" />
+          <button class="rm" data-id="${b.id}" title="entfernen">×</button>
+        </div>
+        <div class="triad">
+          <div>
+            <label>Growth</label>
+            <input type="number" placeholder="auto" value="${b.growth}" min="1" step="1" data-id="${b.id}" data-field="growth" />
+          </div>
+          <div class="triad-op">×</div>
+          <div>
+            <label>volSizeLimitMB</label>
+            <input type="number" placeholder="global" value="${b.volSize}" min="1" max="30000" step="10" data-id="${b.id}" data-field="volSize" />
+          </div>
+          <div class="triad-op">=</div>
+          <div>
+            <label>Ziel-Volumen</label>
+            <div class="est-row">
+              <input type="number" placeholder="auto" value="${b.estValue}" min="0" step="any" data-id="${b.id}" data-field="estValue" />
+              <select data-id="${b.id}" data-field="estUnit">
+                <option value="MB" ${b.estUnit==='MB'?'selected':''}>MB</option>
+                <option value="GB" ${b.estUnit==='GB'?'selected':''}>GB</option>
+                <option value="Gi" ${b.estUnit==='Gi'?'selected':''}>Gi</option>
+                <option value="Ti" ${b.estUnit==='Ti'?'selected':''}>Ti</option>
+                <option value="%" ${b.estUnit==='%'?'selected':''}>% Cluster</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="bucket-card-foot" data-foot-id="${b.id}"></div>
+      `;
+      els.bucketList.appendChild(card);
+    });
+
+    els.bucketList.querySelectorAll('input, select').forEach(inp => {
+      const evt = inp.tagName === 'SELECT' ? 'change' : 'input';
+      inp.addEventListener(evt, (e) => {
+        const id = parseInt(e.target.dataset.id,10);
+        const field = e.target.dataset.field;
+        const b = buckets.find(x => x.id === id);
+        if (!b) return;
+        b[field] = e.target.value;
+        compute();
+      });
+    });
+    els.bucketList.querySelectorAll('.rm').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = parseInt(e.target.dataset.id,10);
+        buckets = buckets.filter(x => x.id !== id);
+        renderBucketRows();
+        compute();
+      });
+    });
+  }
+
+  els.addBucket.addEventListener('click', () => {
+    buckets.push({ id: nextId++, name: 'bucket-' + buckets.length, growth: '', volSize: '', estValue: '', estUnit: 'MB' });
+    renderBucketRows();
+    compute();
+  });
+
+  function compute(){
+    const numServers = Math.max(1, parseInt(els.numServers.value||'1',10));
+    const pvcSize = Math.max(0.001, parseFloat(els.pvcSize.value||'1'));
+    const unitFactor = parseFloat(els.pvcUnit.value);
+    const perServerMB = pvcSize * unitFactor;
+    const totalCapacityMB = numServers * perServerMB;
+
+    const replCode = els.replication.value;
+    const { copies, x, y, z } = copiesFromReplication(replCode);
+    els.replFormula.textContent = `Kopien = (${x}+1) × (${y}+1) × (${z}+1) = ${copies}`;
+
+    let globalVolSize = parseInt(els.volSize.value||'1000',10);
+    if (globalVolSize > 30000) globalVolSize = 30000;
+    els.volSizeValue.textContent = globalVolSize.toLocaleString('de-DE');
+
+    const globalGrowth = Math.max(1, parseInt(els.growthCount.value||'2',10));
+
+    // ---- resolve the Growth / volSize / Target-Volume triangle per bucket ----
+    const bucketData = buckets.map((b, i) => {
+      const gIn = numOrEmpty(b.growth);
+      const vIn = numOrEmpty(b.volSize);
+      const tRaw = numOrEmpty(b.estValue);
+      const tIn = tRaw === null ? null : (b.estUnit === '%' ? (tRaw/100) * totalCapacityMB : tRaw * UNIT_FACTORS[b.estUnit]);
+
+      let derivedG = false, derivedV = false, derivedT = false;
+      let V, G, T;
+
+      // Step 1: resolve volSize
+      if (vIn !== null){
+        V = Math.min(30000, vIn);
+      } else if (tIn !== null && gIn !== null){
+        V = Math.min(30000, tIn / gIn);
+        derivedV = true;
+      } else {
+        V = globalVolSize;
+        derivedV = (vIn === null);
+      }
+
+      // Step 2: resolve growth
+      if (gIn !== null){
+        G = Math.max(1, gIn);
+      } else if (tIn !== null){
+        G = Math.max(1, Math.ceil(tIn / V));
+        derivedG = true;
+      } else {
+        G = globalGrowth;
+        derivedG = true;
+      }
+
+      // Step 3: resolve target volume
+      if (tIn !== null){
+        T = tIn;
+      } else {
+        T = G * V;
+        derivedT = true;
+      }
+
+      const logicalCapMB = G * V;              // usable data capacity (no replication)
+      const physicalVolumes = G * copies;        // physical volume count across cluster
+      const reservedMB = physicalVolumes * V;     // physical disk footprint
+
+      const overshoot = T - logicalCapMB;
+      let fitStatus = 'ok', fitLabel = 'passt';
+      if (!derivedT && overshoot > logicalCapMB * 0.001){
+        fitStatus = 'danger';
+        fitLabel = `zu klein — Growth ≥ ${Math.ceil(T / V)} nötig`;
+      } else if (logicalCapMB > 0 && T / logicalCapMB < 0.3){
+        fitStatus = 'warn';
+        fitLabel = 'überprovisioniert';
+      }
+
+      return {
+        ...b, G, V, T, derivedG, derivedV, derivedT,
+        logicalCapMB, physicalVolumes, reservedMB, fitStatus, fitLabel,
+        color: PALETTE[i % PALETTE.length]
+      };
+    });
+
+    const totalReservedMB = bucketData.reduce((s,b) => s + b.reservedMB, 0);
+    const remainingMB = totalCapacityMB - totalReservedMB;
+    const pct = totalCapacityMB > 0 ? (totalReservedMB / totalCapacityMB) * 100 : 0;
+
+    const reservationPerNewBucketDefault = globalGrowth * copies * globalVolSize;
+    const maxMore = reservationPerNewBucketDefault > 0
+      ? Math.max(0, Math.floor(remainingMB / reservationPerNewBucketDefault))
+      : 0;
+
+    // ---- bucket footers ----
+    bucketData.forEach(b => {
+      const foot = els.bucketList.querySelector(`[data-foot-id="${b.id}"]`);
+      if (!foot) return;
+      const gTxt = b.derivedG ? `<span class="derived">Growth ${fmt(b.G)}</span>` : `Growth ${fmt(b.G)}`;
+      const vTxt = b.derivedV ? `<span class="derived">${fmt(b.V)} MB</span>` : `${fmt(b.V)} MB`;
+      const tTxt = b.derivedT ? `<span class="derived">≈ ${fmt(b.T)} MB</span>` : `${fmt(b.T)} MB`;
+      foot.innerHTML = `
+        <span>${gTxt} × ${vTxt} = ${tTxt} · reserviert ${fmt(b.reservedMB)} MB physisch</span>
+        <span class="fit-badge ${b.fitStatus}">${b.fitLabel}</span>
+      `;
+      // reflect derived values back into the visible fields as placeholders-ish (amber) without stomping user input
+      const growthInput = els.bucketList.querySelector(`input[data-id="${b.id}"][data-field="growth"]`);
+      const volInput = els.bucketList.querySelector(`input[data-id="${b.id}"][data-field="volSize"]`);
+      const estInput = els.bucketList.querySelector(`input[data-id="${b.id}"][data-field="estValue"]`);
+      [growthInput, volInput, estInput].forEach(el => el && el.classList.remove('derived'));
+      if (b.derivedG && growthInput) growthInput.classList.add('derived');
+      if (b.derivedV && volInput) volInput.classList.add('derived');
+      if (b.derivedT && estInput) estInput.classList.add('derived');
+    });
+
+    // ---- stat cards ----
+    els.statCapacity.textContent = fmt(totalCapacityMB) + ' MB';
+    els.statCapacitySub.textContent = `${numServers} × ${fmt(perServerMB)} MB / Server`;
+
+    els.statReserved.textContent = fmt(totalReservedMB) + ' MB';
+    els.statReservedSub.textContent = `${bucketData.length} Bucket${bucketData.length===1?'':'s'} · ${pct.toFixed(0)}% belegt`;
+    els.statReserved.className = 'stat-value ' + (pct > 100 ? 'danger' : pct > 80 ? 'warn' : 'ok');
+
+    els.statMaxMore.textContent = fmt(maxMore);
+    els.statMaxMoreSub.textContent = `à growth=${globalGrowth}, ${globalVolSize.toLocaleString('de-DE')} MB`;
+    els.statMaxMore.className = 'stat-value ' + (maxMore === 0 ? 'danger' : maxMore < 3 ? 'warn' : 'ok');
+
+    // ---- capacity bar ----
+    els.capacityBar.innerHTML = '';
+    bucketData.forEach(b => {
+      const segPct = totalCapacityMB > 0 ? (b.reservedMB / totalCapacityMB) * 100 : 0;
+      const seg = document.createElement('div');
+      seg.className = 'capacity-seg';
+      seg.style.width = Math.min(segPct, 100) + '%';
+      seg.style.background = b.color;
+      seg.title = `${b.name}: reserviert ${fmt(b.reservedMB)} MB physisch · Ziel-Volumen ${fmt(b.T)} MB`;
+      els.capacityBar.appendChild(seg);
+    });
+    if (pct > 100){
+      const overflow = document.createElement('div');
+      overflow.className = 'capacity-seg overflow';
+      overflow.style.width = Math.min(pct - 100, 100) + '%';
+      els.capacityBar.appendChild(overflow);
+    }
+    els.capacityPct.textContent = pct.toFixed(0) + '%';
+    els.capacityPct.style.color = pct > 100 ? 'var(--red)' : pct > 80 ? 'var(--amber)' : 'var(--cyan)';
+
+    // ---- server map (visualized at cluster-default volSize granularity) ----
+    const slotsPerServer = Math.max(1, Math.floor(perServerMB / globalVolSize));
+    const totalSlots = slotsPerServer * numServers;
+    els.slotsInfo.textContent = `${slotsPerServer} Slots × ${numServers} Server = ${totalSlots} gesamt`;
+
+    let flatUnits = [];
+    bucketData.forEach(b => {
+      // convert this bucket's physical footprint into equivalent "global default"-sized slots
+      const slotsEquivalent = Math.max(1, Math.round(b.reservedMB / globalVolSize));
+      for (let i=0;i<slotsEquivalent;i++) flatUnits.push(b.color);
+    });
+
+    els.serverMap.innerHTML = '';
+    for (let s=0; s<numServers; s++){
+      const serverRow = document.createElement('div');
+      serverRow.className = 'server-row';
+      const usedOnThisServer = flatUnits.filter((_, idx) => idx % numServers === s);
+      const label = document.createElement('div');
+      label.className = 'server-label';
+      label.innerHTML = `<span>vol-server-${s}</span><span>${Math.min(usedOnThisServer.length, slotsPerServer)}${usedOnThisServer.length>slotsPerServer? '+'+ (usedOnThisServer.length-slotsPerServer):''} / ${slotsPerServer}</span>`;
+      const slotsWrap = document.createElement('div');
+      slotsWrap.className = 'server-slots';
+      const displaySlots = Math.max(slotsPerServer, usedOnThisServer.length);
+      for (let i=0; i<displaySlots; i++){
+        const slot = document.createElement('div');
+        if (i < usedOnThisServer.length){
+          slot.className = 'slot filled' + (i >= slotsPerServer ? ' overflow' : '');
+          if (i < slotsPerServer) slot.style.background = usedOnThisServer[i];
+        } else {
+          slot.className = 'slot';
+        }
+        slotsWrap.appendChild(slot);
+      }
+      serverRow.appendChild(label);
+      serverRow.appendChild(slotsWrap);
+      els.serverMap.appendChild(serverRow);
+    }
+
+    // ---- legend ----
+    els.legend.innerHTML = '';
+    bucketData.forEach(b => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `<span class="legend-swatch" style="background:${b.color}"></span>${b.name} — Growth ${fmt(b.G)} × ${fmt(b.V)} MB = ${fmt(b.T)} MB Ziel`;
+      els.legend.appendChild(item);
+    });
+
+    // ---- callout ----
+    let calloutHtml = '';
+    if (pct > 100){
+      calloutHtml = `<div class="callout danger">Überbucht — deine Buckets reservieren physisch ${fmt(totalReservedMB)} MB, aber der Cluster hat nur ${fmt(totalCapacityMB)} MB. Growth/volSize senken oder PVC-Größe bzw. Anzahl Volume-Server erhöhen.</div>`;
+      els.statusChip.textContent = 'Überbucht';
+      els.statusChip.style.color = 'var(--red)';
+      els.statusChip.style.borderColor = 'var(--red)';
+    } else if (pct > 80){
+      calloutHtml = `<div class="callout warn">Eng — noch Platz für ca. ${fmt(maxMore)} weitere Bucket(s) bei Cluster-Default-Reservierung.</div>`;
+      els.statusChip.textContent = 'Knapp';
+      els.statusChip.style.color = 'var(--amber)';
+      els.statusChip.style.borderColor = 'var(--amber)';
+    } else {
+      calloutHtml = `<div class="callout ok">Passt — ${fmt(remainingMB)} MB frei, Platz für ca. ${fmt(maxMore)} weitere Bucket(s) bei Cluster-Default-Reservierung.</div>`;
+      els.statusChip.textContent = 'Im Rahmen';
+      els.statusChip.style.color = 'var(--cyan)';
+      els.statusChip.style.borderColor = 'var(--cyan-dim)';
+    }
+    const undersized = bucketData.filter(b => b.fitStatus === 'danger');
+    if (undersized.length > 0){
+      calloutHtml += `<div class="callout danger">${undersized.length} Bucket(s) haben ein fest eingetragenes Ziel-Volumen, das über Growth × volSize hinausgeht: ${undersized.map(b=>b.name).join(', ')}.</div>`;
+    }
+    if (parseInt(els.volSize.value,10) > 30000){
+      calloutHtml += `<div class="callout danger">volumeSizeLimitMB > 30000 wird vom Master abgelehnt (4-Byte-Offset-Limit) — automatisch auf 30000 gekappt.</div>`;
+    }
+    els.calloutBox.innerHTML = calloutHtml;
+  }
+
+  [els.numServers, els.pvcSize, els.pvcUnit, els.replication, els.volSize, els.growthCount].forEach(el => {
+    el.addEventListener('input', compute);
+    el.addEventListener('change', compute);
+  });
+
+  renderBucketRows();
+  compute();
+})();
+</script>
+</body>
+</html>
